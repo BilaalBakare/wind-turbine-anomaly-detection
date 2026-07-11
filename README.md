@@ -1,9 +1,11 @@
-# Wind Turbine anomaly detection — Project Report
+# Wind Turbine Failure Prediction — Project Report
 
 ## Overview
 
 This project uses the [Kaggle Wind Turbine SCADA Dataset](https://www.kaggle.com/datasets/berkerisen/wind-turbine-scada-dataset)
-to detect anomalous turbine behavior. The dataset contains no failure labels problem: identify when actual power output deviates from what the turbine should be producing, given
+to detect anomalous turbine behavior. The dataset contains no failure labels, so
+this is framed as an **unsupervised anomaly detection** problem: identify when
+actual power output deviates from what the turbine should be producing, given
 current wind conditions, and investigate what drives those deviations.
 
 ---
@@ -73,14 +75,41 @@ replacement for the theoretical power curve:
 
 ---
 
-## Status / Next Steps
+## Results
 
-- [x] EDA and power curve overlay
-- [x] Residual analysis over time
-- [x] Anomaly-filtered training data
-- [x] Model comparison and selection
-- [x] `TurbineMonitor` class for live-style alerting
-- [ ] Cross-tabulation of anomalies against time-of-day / season / wind
-      direction (Path 1, in progress)
-- [ ] Duration-aware alerting (only flag sustained deviations, not single
-      noisy readings)
+### Path 2 — Machine Learning
+
+Six regression models were trained on the anomaly-filtered data (wind speed +
+wind direction → actual power) and compared on a held-out test set:
+
+| Model | MAE (kW) | R² |
+|---|---|---|
+| Random Forest | 67.50 | 0.993 |
+| **Decision Tree (selected)** | **66.23** | **0.994** |
+| Linear Regression | *(higher error — straight line cannot follow the S-curve shape)* |
+| Polynomial, Gradient Boosting, KNN | *(compared, Decision Tree performed best overall)* |
+
+The **Decision Tree Regressor** was selected as the final model, with an
+average prediction error of ~66 kW against a ~3,600 kW rated capacity
+(~1.8% of rated capacity) and an R² of 0.994, meaning the model explains
+99.4% of the variance in actual power output from wind speed and direction
+alone.
+
+The trained model was wrapped in a `TurbineMonitor` class that predicts
+expected power, compares it to actual output, and raises an alert when the
+deficit exceeds a threshold calibrated to the model's MAE. On a random
+30-row spot-check sample of the dataset, the monitor correctly operated as
+expected, flagging clear underperformance (e.g. expected ~1,626 kW, actual
+0 kW while wind conditions supported normal output) and passing readings
+that were within normal model error of their expected value. A full-dataset
+run of the simulation (all ~52,000 readings across the year) is the natural
+next step to get a total annual alert count.
+
+### Path 1 — Data Analysis
+
+Residual clustering by month (see Graph 2) shows deviation is concentrated
+in winter and shoulder-season months, consistent with hypotheses like
+icing or seasonal curtailment scheduling.
+
+---
+
